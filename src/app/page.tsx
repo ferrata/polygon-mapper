@@ -4,7 +4,7 @@ import React, { use, useEffect, useRef } from "react";
 import Canvas from "./canvas";
 import Button from "./button";
 import FileInput from "./fileInput";
-import { Node } from "./node";
+import { Node } from "../lib/Node";
 
 // declare global {
 //   interface CanvasRenderingContext2D {

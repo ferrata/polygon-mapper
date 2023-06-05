@@ -1,7 +1,12 @@
-import React, { useEffect } from "react";
+import React, { ComponentType, useEffect } from "react";
 import { useRef } from "react";
-import { Node, Point } from "./node";
-import "@/types/CanvasRenderingContext2D";
+import { Node, Point } from "../lib/Node";
+// import "../types/CanvasRenderingContext2D";
+import CanvasContext from "../lib/CanvasContext";
+
+// nextjs dynamic import
+// https://nextjs.org/docs/advanced-features/dynamic-import
+// https://nextjs.org/docs/advanced-features/dynamic-import#with-no-ssr
 
 type CanvasProps = {
   containerClassName?: string;
@@ -71,7 +76,6 @@ const Canvas: React.FC<CanvasProps> = ({
 
   useEffect(() => {
     const canvas = canvasRef?.current;
-    const context = canvasContext.current!;
     if (!canvas) {
       return;
     }
@@ -80,7 +84,7 @@ const Canvas: React.FC<CanvasProps> = ({
       return;
     }
 
-    // console.log("coordinates count", coordinates.length);
+    const context = new CanvasContext(canvasContext.current!);
 
     // clear canvas
     context.clearRect(0, 0, canvas.width, canvas.height);
@@ -96,19 +100,11 @@ const Canvas: React.FC<CanvasProps> = ({
 
     // draw an image working area, take inset from the canvas edges from padding
     // size of the working area is the same as the image size
-    context.beginPath();
-    context.moveTo(0, 0);
-    context.lineTo(image.width * scale, 0);
-    context.lineTo(0 + image.width * scale, 0 + image.height * scale);
-    context.lineTo(0, image.height * scale);
-    context.closePath();
-    context.stroke();
+    context.rect(0, 0, image.width * scale, image.height * scale);
 
     context.drawImage(image, 0, 0, image.width * scale, image.height * scale);
 
-    // draw a red dot at the origin
-    context.fillStyle = config.nodeColor;
-    context.dot(0, 0, config.nodeRadius);
+    context.setFillStyle(config.nodeColor).dot(0, 0, config.nodeRadius);
 
     if (!state.nodes.length) {
       return;
@@ -123,12 +119,12 @@ const Canvas: React.FC<CanvasProps> = ({
 
       if (pointer) {
         if (hitTestNode(pointer, node)) {
-          context.strokeStyle = config.hoverNodeColor;
-          context.lineWidth = Math.max(
-            2,
-            config.hoverNodeRadius - config.nodeRadius
-          );
-          context.circle(x, y, config.hoverNodeRadius);
+          context
+            .setStrokeStyle(
+              Math.max(2, config.hoverNodeRadius - config.nodeRadius),
+              config.hoverNodeColor
+            )
+            .circle(x, y, config.hoverNodeRadius);
 
           if (!state.selectedNodes.includes(node)) {
             context.text(x, y, `x: ${x}\ny: ${y}`);
@@ -141,14 +137,17 @@ const Canvas: React.FC<CanvasProps> = ({
           state.dragging.isDragging && hitTestNode(state.dragging.start, node)
             ? state.dragging.end
             : node;
-        context.strokeStyle =
-          pointer && hitTestNode(pointer, node)
-            ? config.hoverNodeColor
-            : config.selectedNodeColor;
-        context.lineWidth = 1;
-        context.dot(x, y, 5);
-        context.circle(x, y, config.selectedNodeRadius);
-        context.text(x, y, `x: ${x}\ny: ${y}`);
+
+        context
+          .setStrokeStyle(
+            1,
+            pointer && hitTestNode(pointer, node)
+              ? config.hoverNodeColor
+              : config.selectedNodeColor
+          )
+          .dot(x, y, 5)
+          .circle(x, y, config.selectedNodeRadius)
+          .text(x, y, `x: ${x}\ny: ${y}`);
       }
     });
 
@@ -178,8 +177,7 @@ const Canvas: React.FC<CanvasProps> = ({
     //   context.text(x, y, `x: ${x}\ny: ${y}`);
     // });
 
-    context.strokeStyle = config.lineColor;
-    context.lineWidth = config.lineWidth;
+    context.setStrokeStyle(config.lineWidth, config.lineColor);
 
     const effectiveNodes = state.dragging.isDragging
       ? [
@@ -193,7 +191,7 @@ const Canvas: React.FC<CanvasProps> = ({
       : state.nodes;
 
     context.polygon(effectiveNodes);
-  }, [image, pointer, state]);
+  }, [image, pointer, state, config]);
 
   useEffect(() => {
     console.log("file changed, cleanup");
