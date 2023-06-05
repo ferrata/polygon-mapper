@@ -141,20 +141,19 @@ import { Node } from "../lib/Node";
 // const CoordinatesContext = React.createContext<Coordinate[]>([]);
 // const useCoordinates = () => React.useContext(CoordinatesContext);
 
-// const fotmatCoordinates = (coordinates: Coordinate[]): string => {
-//   const sorted = coordinates.sort((a, b) => a.order - b.order);
-//   const values = sorted
-//     .map(({ x, y }: { x: number; y: number }) => `  { "x": ${x}, "y": ${y} }`)
-//     .join(",\n");
-//   const formatted = ["[", values, "]"].join("\n");
-//   return formatted;
-// };
+const fotmatNodes = (coordinates: Node[]): string => {
+  const sorted = coordinates.sort((a, b) => a.order - b.order);
+  const values = sorted
+    .map(({ x, y }: { x: number; y: number }) => `  { "x": ${x}, "y": ${y} }`)
+    .join(",\n");
+  const formatted = ["[", values, "]"].join("\n");
+  return formatted;
+};
 
 export default function Home() {
   const [file, setFile] = React.useState<File | null>(null);
   const [userInput, setUserInput] = React.useState("");
   const [error, setError] = React.useState<Error | null>(null);
-  // const [coordinates, setCoordinates] = React.useState<Coordinate[]>([]);
 
   useEffect(() => {
     if (userInput) {
@@ -182,13 +181,9 @@ export default function Home() {
 
           <Canvas
             file={file}
-            // onClick={(x, y) => {
-            //   // setCoordinates((coordinates) => [
-            //   //   ...coordinates,
-            //   //   { x, y, order: coordinates.length },
-            //   // ]);
-            //   // return coordinates.length + 1;
-            // }}
+            onChanged={(nodes) => {
+              setUserInput(fotmatNodes(nodes));
+            }}
             containerClassName="border border-gray-600 border-dashed rounded"
             className="m-4 border border-gray-300 bg-gradient-to-b from-white dark:from-zinc-800/30"
           />

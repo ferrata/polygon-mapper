@@ -1,20 +1,17 @@
-import React, { ComponentType, useEffect } from "react";
+import React, { useEffect } from "react";
 import { useRef } from "react";
 import { Node, Point } from "../lib/Node";
-// import "../types/CanvasRenderingContext2D";
 import CanvasContext from "../lib/CanvasContext";
-
-// nextjs dynamic import
-// https://nextjs.org/docs/advanced-features/dynamic-import
-// https://nextjs.org/docs/advanced-features/dynamic-import#with-no-ssr
 
 type CanvasProps = {
   containerClassName?: string;
   className?: string;
   file: File | null;
   tabIndex?: number;
-  onClick?: (x: number, y: number) => number; // returns order
+  onChanged?: (nodes: Node[]) => void;
   config?: {
+    arrowLength: number;
+    arrowWidth: number;
     nodeColor: string;
     nodeRadius: number;
     selectedNodeColor: string;
@@ -52,6 +49,8 @@ const Canvas: React.FC<CanvasProps> = ({
   file,
   tabIndex = 0,
   config = {
+    arrowLength: 15,
+    arrowWidth: 7,
     nodeColor: "red",
     nodeRadius: 5,
     selectedNodeColor: "white",
@@ -61,7 +60,7 @@ const Canvas: React.FC<CanvasProps> = ({
     hoverNodeColor: "yellow",
     hoverNodeRadius: 7,
   },
-  // onClick,
+  onChanged,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContext = React.useRef<CanvasRenderingContext2D | null>(null);
@@ -98,27 +97,77 @@ const Canvas: React.FC<CanvasProps> = ({
       canvas.height / image.height
     );
 
-    // draw an image working area, take inset from the canvas edges from padding
-    // size of the working area is the same as the image size
-    context.rect(0, 0, image.width * scale, image.height * scale);
-
-    context.drawImage(image, 0, 0, image.width * scale, image.height * scale);
-
-    context.setFillStyle(config.nodeColor).dot(0, 0, config.nodeRadius);
+    context
+      .rect(0, 0, image.width * scale, image.height * scale)
+      .drawImage(image, 0, 0, image.width * scale, image.height * scale)
+      .setFillStyle(config.nodeColor)
+      .dot(0, 0, config.nodeRadius);
 
     if (!state.nodes.length) {
       return;
     }
 
+    const effectiveNodes = state.dragging.isDragging
+      ? [
+          ...state.nodes.filter((node) => node !== state.dragging.node!),
+          {
+            ...state.dragging.node!,
+            x: state.dragging.end.x,
+            y: state.dragging.end.y,
+          },
+        ]
+      : state.nodes;
+
+    effectiveNodes.sort((a, b) => a.order - b.order);
+
+    context
+      .setStrokeStyle(config.lineWidth, config.lineColor)
+      .polygon(effectiveNodes);
+
+    const c = canvasContext.current!;
+    // draw a filled arrow from the first node to the second node
+    // arror should be drawn on a half way of the line
+
+    if (effectiveNodes.length > 1) {
+      const { x: x1, y: y1 } = effectiveNodes[0];
+      const { x: x2, y: y2 } = effectiveNodes[1];
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const angle = Math.atan2(dy, dx);
+      const length =
+        Math.sqrt(dx * dx + dy * dy) / 2 +
+        config.arrowLength -
+        config.nodeRadius;
+
+      c.save();
+      try {
+        c.translate(x1, y1);
+        c.rotate(angle);
+        c.beginPath();
+        c.moveTo(length, 0);
+        c.lineTo(length - config.arrowLength, config.arrowWidth);
+        c.lineTo(length - config.arrowLength, -config.arrowWidth);
+        c.closePath();
+        c.fill();
+      } finally {
+        c.restore();
+      }
+    }
+
+    let hovered = false;
     state.nodes.forEach((node) => {
-      const { x, y } = node;
+      const { x, y } =
+        state.dragging.isDragging && hitTestNode(state.dragging.start, node)
+          ? state.dragging.end
+          : node;
 
       if (!state.selectedNodes.includes(node)) {
-        context.dot(x, y, 5);
+        context.setFillStyle(config.nodeColor).dot(x, y, 5);
       }
 
       if (pointer) {
-        if (hitTestNode(pointer, node)) {
+        if (!hovered && hitTestNode(pointer, node)) {
+          hovered = true;
           context
             .setStrokeStyle(
               Math.max(2, config.hoverNodeRadius - config.nodeRadius),
@@ -139,59 +188,24 @@ const Canvas: React.FC<CanvasProps> = ({
             : node;
 
         context
+          .setFillStyle(config.nodeColor)
+          .dot(x, y, 5)
           .setStrokeStyle(
             1,
             pointer && hitTestNode(pointer, node)
               ? config.hoverNodeColor
               : config.selectedNodeColor
           )
-          .dot(x, y, 5)
           .circle(x, y, config.selectedNodeRadius)
           .text(x, y, `x: ${x}\ny: ${y}`);
       }
     });
-
-    // if (draggingState.isDragging) {
-    //   const { end } = draggingState;
-    //   context.strokeStyle = config.lineColor;
-    //   context.lineWidth = config.lineWidth;
-    //   context.beginPath();
-    //   context.moveTo(draggingState.start.x, draggingState.start.y);
-    //   // context.lineTo(end.x, end.y);
-    //   context.stroke();
-    // }
-
-    // draw a black circle around selected nodes
-    // selectedNodes.forEach((node) => {
-    //   const { x, y } =
-    //     draggingState.isDragging && hitTestNode(draggingState.start, node)
-    //       ? draggingState.end
-    //       : node;
-    //   context.strokeStyle =
-    //     pointer && hitTestNode(pointer, node)
-    //       ? config.hoverNodeColor
-    //       : config.selectedNodeColor;
-    //   context.lineWidth = 1;
-    //   context.dot(x, y, 5);
-    //   context.circle(x, y, config.selectedNodeRadius);
-    //   context.text(x, y, `x: ${x}\ny: ${y}`);
-    // });
-
-    context.setStrokeStyle(config.lineWidth, config.lineColor);
-
-    const effectiveNodes = state.dragging.isDragging
-      ? [
-          ...state.nodes.filter((node) => !state.selectedNodes.includes(node)),
-          {
-            ...state.dragging.node!,
-            x: state.dragging.end.x,
-            y: state.dragging.end.y,
-          },
-        ]
-      : state.nodes;
-
-    context.polygon(effectiveNodes);
   }, [image, pointer, state, config]);
+
+  useEffect(() => {
+    const sortedNodes = [...state.nodes].sort((a, b) => a.order - b.order);
+    onChanged?.(sortedNodes);
+  }, [state.nodes, onChanged]);
 
   useEffect(() => {
     console.log("file changed, cleanup");
@@ -205,47 +219,19 @@ const Canvas: React.FC<CanvasProps> = ({
 
   const hitTestNode = (
     pointer: { x: number; y: number },
-    node: Node
+    node: Node,
+    diff = 3
   ): boolean => {
     const { x: cx, y: cy } = node;
     return (
-      pointer.x >= cx - 10 &&
-      pointer.x <= cx + 10 &&
-      pointer.y >= cy - 10 &&
-      pointer.y <= cy + 10
+      pointer.x >= cx - diff &&
+      pointer.x <= cx + diff &&
+      pointer.y >= cy - diff &&
+      pointer.y <= cy + diff
     );
   };
 
   useEffect(() => {
-    // const onClickHandler = (e: any) => {
-    //   const canvas = canvasRef?.current;
-
-    //   if (!canvas) {
-    //     return;
-    //   }
-
-    //   const rect = canvas.getBoundingClientRect();
-
-    //   const x = Math.round(e.clientX - rect.left);
-    //   const y = Math.round(e.clientY - rect.top);
-
-    //   setNodes((oldNodes) => {
-    //     // clear selected nodes if shift key or ctrl key is not pressed
-    //     if (!e.shiftKey && !e.ctrlKey) {
-    //       setSelectedNodes(() => []);
-    //     }
-
-    //     const found = oldNodes.find((node) => hitTestNode({ x, y }, node));
-    //     if (found) {
-    //       setSelectedNodes((oldSelectedNodes) => [...oldSelectedNodes, found]);
-    //       return oldNodes;
-    //     }
-
-    //     const order = oldNodes.length + 1;
-    //     return [...oldNodes, { x, y, order: order }];
-    //   });
-    // };
-
     const onMouseDownHandler = (e: any) => {
       const canvas = canvasRef?.current;
 
@@ -267,10 +253,10 @@ const Canvas: React.FC<CanvasProps> = ({
           return {
             ...oldState,
             dragging: {
-              isDragging: true,
+              isDragging: false,
+              node: found,
               start: { x, y },
               end: { x, y },
-              node: found,
             },
           };
         }
@@ -291,14 +277,37 @@ const Canvas: React.FC<CanvasProps> = ({
 
       setState((oldState) => {
         if (!e.shiftKey && !e.ctrlKey) {
+          if (!oldState.dragging.isDragging && oldState.dragging.node) {
+            return {
+              ...oldState,
+              dragging: noDragging,
+              selectedNodes: [oldState.dragging.node],
+            };
+          }
+
           return {
             ...oldState,
             dragging: noDragging,
-            selectedNodes: [],
-            nodes: [
-              ...oldState.nodes,
-              { x, y, order: oldState.nodes.length + 1 },
-            ],
+            selectedNodes:
+              oldState.dragging.isDragging && oldState.dragging.node
+                ? [oldState.dragging.node]
+                : [],
+            nodes:
+              oldState.dragging.isDragging && oldState.dragging.node
+                ? [
+                    ...oldState.nodes.filter(
+                      (node) => node !== oldState.dragging.node
+                    ),
+                    {
+                      ...oldState.dragging.node!,
+                      x: oldState.dragging.end.x,
+                      y: oldState.dragging.end.y,
+                    },
+                  ]
+                : [
+                    ...oldState.nodes,
+                    { x, y, order: oldState.nodes.length + 1 },
+                  ],
           };
         }
 
@@ -332,7 +341,7 @@ const Canvas: React.FC<CanvasProps> = ({
       setPointer({ x, y });
 
       setState((oldState) => {
-        if (!oldState.dragging.isDragging) {
+        if (!oldState.dragging.node) {
           return oldState;
         }
 
@@ -340,6 +349,7 @@ const Canvas: React.FC<CanvasProps> = ({
           ...oldState,
           dragging: {
             ...oldState.dragging,
+            isDragging: true,
             end: { x, y },
           },
         };
@@ -358,7 +368,7 @@ const Canvas: React.FC<CanvasProps> = ({
       }
 
       if (e.key === "Delete") {
-        console.log("delete");
+        // console.log("delete");
         setState((oldState) => {
           return {
             ...oldState,
@@ -366,6 +376,17 @@ const Canvas: React.FC<CanvasProps> = ({
               (node) => !oldState.selectedNodes.includes(node)
             ),
             selectedNodes: [],
+          };
+        });
+      }
+
+      if (e.key === "a" && e.ctrlKey) {
+        // console.log("select all");
+        e.preventDefault();
+        setState((oldState) => {
+          return {
+            ...oldState,
+            selectedNodes: oldState.nodes,
           };
         });
       }
