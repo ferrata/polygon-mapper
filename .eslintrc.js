@@ -1,6 +1,6 @@
 module.exports = {
   parser: "@typescript-eslint/parser",
-  plugins: ["@typescript-eslint"],
+  // plugins: ["@typescript-eslint"],
   extends: "next/core-web-vitals",
   parserOptions: {
     ecmaVersion: 2018,
